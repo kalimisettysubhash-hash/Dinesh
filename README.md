@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🌸 TanviCRM — Customer CRM & Analytics Dashboard
 
 A production-ready full-stack CRM for **Tanvi Boutique** featuring customer management, purchase tracking, analytics dashboards, and customer segmentation.
@@ -194,3 +195,6 @@ SECRET_KEY=your-very-secret-key
 ---
 
 *Built with ❤️ for Tanvi Boutique*
+=======
+# Dinesh
+>>>>>>> 769edd351ca52b3f6a7f3e2206372ff676a95613
