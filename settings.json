@@ -1,0 +1,11 @@
+{
+    "css.lint.unknownAtRules": "ignore",
+    "scss.lint.unknownAtRules": "ignore",
+    "files.associations": {
+        "*.css": "tailwindcss"
+    },
+    "python.defaultInterpreterPath": "backend/venv/Scripts/python.exe",
+    "python.analysis.extraPaths": [
+        "./backend"
+    ]
+}
