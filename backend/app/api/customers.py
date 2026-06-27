@@ -1,7 +1,7 @@
 import io
 import csv
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,32 +19,7 @@ from ..schemas.customer import CustomerCreate, CustomerResponse, CustomerUpdate
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
 
-def compute_segment(total_spending: float, purchase_count: int, vip_threshold: float) -> str:
-    if total_spending >= vip_threshold:
-        return "VIP"
-    elif purchase_count >= 2:
-        return "Regular"
-    else:
-        return "New"
-
-
-def get_vip_threshold(db: Session) -> float:
-    """Compute 90th percentile of customer total spending."""
-    spending_subquery = (
-        db.query(func.coalesce(func.sum(Purchase.amount), 0).label("total"))
-        .filter(Purchase.customer_id == Customer.id)
-        .correlate(Customer)
-        .scalar_subquery()
-    )
-    rows = db.query(spending_subquery).all()
-    if not rows:
-        return 0.0
-    values = sorted([float(r[0]) for r in rows], reverse=True)
-    idx = max(0, int(len(values) * 0.10) - 1)
-    return values[idx] if values else 0.0
-
-
-def enrich_customer(customer: Customer, db: Session, vip_threshold: float) -> dict:
+def enrich_customer(customer: Customer, db: Session) -> dict:
     agg = (
         db.query(
             func.coalesce(func.sum(Purchase.amount), 0).label("total"),
@@ -56,7 +31,6 @@ def enrich_customer(customer: Customer, db: Session, vip_threshold: float) -> di
     total = float(agg.total)
     count = int(agg.count)
     last_purchase = db.query(func.max(Purchase.purchase_date)).filter(Purchase.customer_id == customer.id).scalar()
-    segment = compute_segment(total, count, vip_threshold)
     return {
         "id": str(customer.id),
         "name": customer.name,
@@ -70,7 +44,7 @@ def enrich_customer(customer: Customer, db: Session, vip_threshold: float) -> di
         "last_purchase_date": last_purchase,
         "total_spending": total,
         "purchase_count": count,
-        "segment": segment,
+        "segment": customer.segment or "New",
     }
 
 
@@ -98,9 +72,8 @@ def list_customers(
     if phone:
         query = query.filter(Customer.phone.ilike(f"%{phone}%"))
 
-    vip_threshold = get_vip_threshold(db)
     all_customers = query.all()
-    data = [enrich_customer(c, db, vip_threshold) for c in all_customers]
+    data = [enrich_customer(c, db) for c in all_customers]
 
     if segment and segment != 'All':
         data = [c for c in data if c['segment'] == segment]
@@ -133,8 +106,7 @@ def create_customer(
     db.add(customer)
     db.commit()
     db.refresh(customer)
-    vip_threshold = get_vip_threshold(db)
-    return enrich_customer(customer, db, vip_threshold)
+    return enrich_customer(customer, db)
 
 
 @router.get("/export/csv")
@@ -148,7 +120,6 @@ def export_csv(
     if search:
         query = query.filter(Customer.name.ilike(f"%{search}%"))
     customers = query.order_by(Customer.name).all()
-    vip_threshold = get_vip_threshold(db)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -168,7 +139,7 @@ def export_csv(
         "Updated At",
     ])
     for c in customers:
-        enriched = enrich_customer(c, db, vip_threshold)
+        enriched = enrich_customer(c, db)
         if segment and enriched["segment"] != segment:
             continue
         writer.writerow([
@@ -209,8 +180,7 @@ def get_customer(
     customer = db.query(Customer).filter(Customer.id == cid).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
-    vip_threshold = get_vip_threshold(db)
-    enriched = enrich_customer(customer, db, vip_threshold)
+    enriched = enrich_customer(customer, db)
 
     purchases = (
         db.query(Purchase)
@@ -252,8 +222,7 @@ def update_customer(
         setattr(customer, field, value)
     db.commit()
     db.refresh(customer)
-    vip_threshold = get_vip_threshold(db)
-    return enrich_customer(customer, db, vip_threshold)
+    return enrich_customer(customer, db)
 
 
 @router.delete("/{customer_id}", status_code=204)

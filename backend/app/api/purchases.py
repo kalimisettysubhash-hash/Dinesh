@@ -1,6 +1,9 @@
+import csv
+import io
 from datetime import date
 from decimal import Decimal
 from typing import Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -15,6 +18,13 @@ from ..models.user import User
 from ..schemas.purchase import PurchaseCreate, PurchaseResponse, PurchaseUpdate
 
 router = APIRouter(prefix="/api/purchases", tags=["purchases"])
+
+
+def _parse_uuid(value: str, label: str = "id") -> UUID:
+    try:
+        return UUID(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"Invalid {label}")
 
 
 def _to_response(p: Purchase) -> dict:
@@ -57,7 +67,7 @@ def list_purchases(
     if amount_max is not None:
         query = query.filter(Purchase.amount <= amount_max)
     if customer_id:
-        query = query.filter(Purchase.customer_id == customer_id)
+        query = query.filter(Purchase.customer_id == _parse_uuid(customer_id, "customer id"))
     if category:
         query = query.filter(Purchase.category.ilike(f"%{category}%"))
 
@@ -84,10 +94,13 @@ def create_purchase(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+    customer_id = _parse_uuid(payload.customer_id, "customer id")
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
-    purchase = Purchase(**payload.model_dump())
+    purchase_data = payload.model_dump()
+    purchase_data["customer_id"] = customer_id
+    purchase = Purchase(**purchase_data)
     db.add(purchase)
     db.commit()
     db.refresh(purchase)
@@ -100,7 +113,8 @@ def get_purchase(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    p = db.query(Purchase).filter(Purchase.id == purchase_id).first()
+    pid = _parse_uuid(purchase_id, "purchase id")
+    p = db.query(Purchase).filter(Purchase.id == pid).first()
     if not p:
         raise HTTPException(status_code=404, detail="Purchase not found")
     response = _to_response(p)
@@ -122,10 +136,15 @@ def update_purchase(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    p = db.query(Purchase).filter(Purchase.id == purchase_id).first()
+    pid = _parse_uuid(purchase_id, "purchase id")
+    p = db.query(Purchase).filter(Purchase.id == pid).first()
     if not p:
         raise HTTPException(status_code=404, detail="Purchase not found")
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if field == "customer_id":
+            value = _parse_uuid(value, "customer id")
+            if not db.query(Customer).filter(Customer.id == value).first():
+                raise HTTPException(status_code=404, detail="Customer not found")
         setattr(p, field, value)
     db.commit()
     db.refresh(p)
@@ -147,7 +166,7 @@ def export_csv(
     if date_to:
         query = query.filter(Purchase.purchase_date <= date_to)
     if customer_id:
-        query = query.filter(Purchase.customer_id == customer_id)
+        query = query.filter(Purchase.customer_id == _parse_uuid(customer_id, "customer id"))
     if category:
         query = query.filter(Purchase.category.ilike(f"%{category}%"))
 
@@ -192,7 +211,8 @@ def delete_purchase(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    p = db.query(Purchase).filter(Purchase.id == purchase_id).first()
+    pid = _parse_uuid(purchase_id, "purchase id")
+    p = db.query(Purchase).filter(Purchase.id == pid).first()
     if not p:
         raise HTTPException(status_code=404, detail="Purchase not found")
     db.delete(p)

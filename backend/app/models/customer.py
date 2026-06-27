@@ -18,6 +18,7 @@ class Customer(Base):
     address = Column(Text)
     style_preferences = Column(Text)
     notes = Column(Text, default='')
+    segment = Column(String(20), nullable=False, default='New')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

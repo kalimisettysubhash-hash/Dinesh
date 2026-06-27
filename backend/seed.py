@@ -1,5 +1,5 @@
 """
-Seed script – creates the DB, an admin user, sample customers and purchases.
+Seed script - creates the DB, an admin user, sample customers and purchases.
 Run from the backend/ directory:
     python seed.py
 """
@@ -17,12 +17,12 @@ from app.models.user import User
 from app.models.customer import Customer
 from app.models.purchase import Purchase
 
-# ── Create all tables ──────────────────────────────────────────────────────────
+# Create all tables
 Base.metadata.create_all(bind=engine)
 
 db = SessionLocal()
 
-# ── Admin user ─────────────────────────────────────────────────────────────────
+# Admin user
 if not db.query(User).filter(User.username == "admin").first():
     admin = User(
         username="admin",
@@ -31,9 +31,9 @@ if not db.query(User).filter(User.username == "admin").first():
     )
     db.add(admin)
     db.commit()
-    print("✅  Admin user created  (username: admin | password: admin123)")
+    print("Admin user created (username: admin | password: admin123)")
 
-# ── Sample data ────────────────────────────────────────────────────────────────
+# Sample data
 CATEGORIES = ["Sarees", "Lehengas", "Kurtis", "Blouses", "Jewellery", "Accessories", "Suits", "Other"]
 PAYMENT_METHODS = ["Cash", "UPI", "Credit Card", "Debit Card", "Net Banking"]
 
@@ -69,9 +69,9 @@ for c in created_customers:
     db.refresh(c)
 
 all_customers = db.query(Customer).all()
-print(f"✅  {len(created_customers)} customers seeded (total: {len(all_customers)})")
+print(f"{len(created_customers)} customers seeded (total: {len(all_customers)})")
 
-# ── Purchases ──────────────────────────────────────────────────────────────────
+# Purchases
 if db.query(Purchase).count() == 0:
     today = date.today()
     items = [
@@ -109,11 +109,11 @@ if db.query(Purchase).count() == 0:
             db.add(p)
             purchases_added += 1
     db.commit()
-    print(f"✅  {purchases_added} purchases seeded")
+    print(f"{purchases_added} purchases seeded")
 else:
-    print("ℹ️   Purchases already exist, skipping")
+    print("Purchases already exist, skipping")
 
 db.close()
-print("\n🌸  Seed complete! Login at http://localhost:5173")
+print("\nSeed complete! Login at http://localhost:5173")
 print("    Username: admin")
 print("    Password: admin123")
